@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank4Me Prep | Gestor de Firmas</title>
+    <style>
+        :root {
+            --primary: #004a99;
+            --primary-hover: #003570;
+            --bg: #f0f2f5;
+            --text: #333;
+            --error: #d93025;
+            --success: #188038;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            color: var(--primary);
+            margin: 0;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #555;
+        }
+
+        select, input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+            background-color: #fafafa;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Bank4Me Prep</h1>
+        <p>Preparación de PDFs para firma grafométrica</p>
+    </div>
+
+    <div class="form-group">
+        <label for="docSelector">Tipo de Documento:</label>
+        <select id="docSelector">
+            <option value="" disabled selected>Cargando configuraciones...</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="pdfFile">Seleccionar PDF Original:</label>
+        <input type="file" id="pdfFile" accept="application/pdf">
+    </div>
+
+    <button id="btnProcesar" onclick="procesarDocumento()">PROCESAR Y DESCARGAR</button>
+
+    <div id="status"></div>
+</div>
+
+<script>
+    const API_URL = ''; // 'http://localhost:3000'; // Cambia esto en producción
+    const btn = document.getElementById('btnProcesar');
+    const status = document.getElementById('status');
+    const docSelector = document.getElementById('docSelector');
+
+    // 1. Cargar configuración al iniciar la página
+    window.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const response = await fetch('/configuracion'); //await fetch(`${API_URL}/configuracion`);
+            if (!response.ok) throw new Error();
+            const documentos = await response.json();
+            
+            docSelector.innerHTML = '<option value="" disabled selected>-- Seleccione tipo --</option>';
+            documentos.forEach(doc => {
+                const opt = document.createElement('option');
+                opt.value = doc.id;
+                opt.textContent = doc.nombre;
+                docSelector.appendChild(opt);
+            });
+        } catch (err) {
+            showStatus("Error al conectar con el servidor de configuración.", "error");
+            btn.disabled = true;
+        }
+    });
+
+    // 2. Función principal de envío y procesamiento
+    async function procesarDocumento() {
+        const fileInput = document.getElementById('pdfFile');
+        const docId = docSelector.value;
+
+        if (!docId) return alert("Por favor, selecciona un tipo de documento.");
+        if (!fileInput.files[0]) return alert("Por favor, selecciona un archivo PDF.");
+
+        // Bloquear UI
+        btn.disabled = true;
+        showStatus("Procesando documento...", "info", true);
+
+        const formData = new FormData();
+        formData.append('documento', fileInput.files[0]);
+        formData.append('docId', docId);
+
+        try {
+            const response = await fetch('/preparar-firma', // await fetch(`${API_URL}/preparar-firma`,
+            {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || "Error en el procesamiento");
+            }
+
+            // Recibir el PDF binario
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            
+            // Crear link de descarga invisible
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `PREPARADO_${fileInput.files[0].name}`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            
+            showStatus("¡Documento procesado con éxito!", "success");
+        } catch (err) {
+            showStatus(`Error: ${err.message}`, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+// Función auxiliar para mostrar mensajes corregida
+    function showStatus(msg, type, showLoader = false) {
+        status.style.display = "block";
+        status.innerHTML = showLoader ? `<div class="loader"></div> ${msg}` : msg;
+        
+        if (type === "error") {
+            status.style.backgroundColor = "#fce8e6";
+            status.style.color = "#d93025"; // Color rojo directo
+        } else if (type === "success") {
+            status.style.backgroundColor = "#e6f4ea";
+            status.style.color = "#188038"; // Color verde directo
+        } else {
+            status.style.backgroundColor = "#e8f0fe";
+            status.style.color = "#004a99"; // Color azul directo
+        }
+    }
+</script>
+
+</body>
+</html>

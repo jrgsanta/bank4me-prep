@@ -1,0 +1,19 @@
+{
+  "name": "bank4me-prep",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Microservicio de preparación de PDFs para Auriga Bank4Me",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js",
+    "test-gen": "node test-gen.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.22.1",
+    "multer": "^1.4.5-lts.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38"
+  }
+}

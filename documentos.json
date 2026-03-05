@@ -1,0 +1,16 @@
+[
+  {
+    "id": "CONTRATO_ALTA",
+    "nombre": "Contrato de Alta Cliente",
+    "tieneEtiqueta": true,
+    "etiqueta": "[FIRMA_AQUI]"
+  },
+  {
+    "id": "ORDEN_PAGO",
+    "nombre": "Orden de Pago Manual",
+    "tieneEtiqueta": false,
+    "x": 400,
+    "y": 150,
+    "pagina": 0
+  }
+]
