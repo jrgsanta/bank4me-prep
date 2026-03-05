@@ -20,14 +20,48 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Cargar configuración de documentos
 const dbDocumentos = JSON.parse(fs.readFileSync('./documentos.json', 'utf-8'));
 
-async function getCoordsFromText(pdfBuffer, anchorText) {
-    const data = new Uint8Array(pdfBuffer);
-    const pdf = await pdfjs.getDocument({ data }).promise;
+async function getCoordsFromText(buffer, etiqueta) {
+    const data = new Uint8Array(buffer);
+    const loadingTask = pdfjsLib.getDocument({ data });
+    const pdf = await loadingTask.promise;
+    
+    const normalize = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const target = normalize(etiqueta);
+
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const item = textContent.items.find(item => item.str.includes(anchorText));
-        if (item) return { pageIndex: i - 1, x: item.transform[4], y: item.transform[5] };
+        const items = textContent.items;
+
+        // Intentamos primero la búsqueda por bloques individuales (lo que ya hacíamos)
+        for (const item of items) {
+            if (normalize(item.str).includes(target)) {
+                return { x: item.transform[4], y: item.transform[5], pageIndex: i - 1 };
+            }
+        }
+
+        // --- PLAN C: RECONSTRUCCIÓN POR ACUMULACIÓN ---
+        // Si el PDF troceó la etiqueta, la buscamos uniendo trozos vecinos
+        for (let j = 0; j < items.length; j++) {
+            let textoAcumulado = "";
+            let itemsUsados = [];
+
+            // Miramos el item actual y los 3 siguientes por si la etiqueta está partida
+            for (let k = j; k < Math.min(j + 4, items.length); k++) {
+                textoAcumulado += normalize(items[k].str);
+                
+                if (textoAcumulado.includes(target)) {
+                    console.log(`✅ ¡Etiqueta reconstruida detectada en pág ${i}!`);
+                    console.log(`Trozo inicial: "${items[j].str}" -> Coordenadas: ${items[j].transform[4]}, ${items[j].transform[5]}`);
+                    
+                    return {
+                        x: items[j].transform[4],
+                        y: items[j].transform[5],
+                        pageIndex: i - 1
+                    };
+                }
+            }
+        }
     }
     return null;
 }
