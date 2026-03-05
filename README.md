@@ -54,7 +54,7 @@ cd bank4me-prep
 # Limpiar instalaciones previas e instalar dependencias actualizadas
 rm -rf node_modules package-lock.json
 npm install
-
+```
 ## ⚙️ Configuración (`documentos.json`)
 
 El sistema es totalmente dinámico. Puedes añadir nuevos documentos editando este fichero sin necesidad de modificar el código fuente:
@@ -76,15 +76,19 @@ El sistema es totalmente dinámico. Puedes añadir nuevos documentos editando es
     "pagina": 0
   }
 ]
+```
+
+---
 
 ## 🚀 Uso del Microservicio
 Para poner en marcha el servicio de preparación de documentos, sigue estos pasos:
 
 Inicia el servidor:
 
-Bash
+```Bash
 npm run dev
 Acceso web: Abre tu navegador en http://localhost:3000.
+```
 
 Procesamiento: * Selecciona tu archivo PDF (puedes usar test-gen.js para crear uno de prueba si no tienes uno con etiquetas).
 
@@ -92,13 +96,18 @@ Elige el tipo de documento del desplegable.
 
 Pulsa en Procesar para obtener el PDF listo para la tableta de firma.
 
+---
+
 ## 🔧 Solución de Problemas (FAQ)
-¿Error: form.createSignature is not a function?
+
+### ¿Error: form.createSignature is not a function?
 Este error ocurre si Node.js carga una versión antigua de pdf-lib de la caché o del sistema.
 Solución: Asegúrate de que tu package.json indique "pdf-lib": "1.17.1". El proyecto incluye un bloque de "Plan B" en app.js que utiliza campos de texto con el ID técnico correcto como fallback si la función de firma nativa no está disponible en el entorno local.
 
 ¿No se encuentra la etiqueta en el PDF?
 Asegúrate de que el PDF no esté "rasterizado" (es decir, que no sea una imagen escaneada). La búsqueda de coordenadas requiere que el PDF mantenga su capa de texto digital. Puedes verificarlo intentando seleccionar el texto con el ratón en cualquier lector de PDF.
+
+---
 
 ## 📂 Estructura del Proyecto
 app.js: Servidor Express y lógica de inyección de campos mediante coordenadas o etiquetas.
@@ -112,5 +121,3 @@ test-gen.js: Utilidad para generar documentos PDF de prueba con etiquetas de anc
 
 ### Un último detalle
 Este fichero resume todo el flujo de trabajo: el contexto de **Bank4Me**, los retos técnicos con las versiones de la librería y la guía de puesta en marcha.
-
-¿Te gustaría que añadiera una sección sobre cómo integrar esto con un **almacenamiento en la nube (como AWS S3)** o prefieres dejarlo como un microservicio local por ahora?
