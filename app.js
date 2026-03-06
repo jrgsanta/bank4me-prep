@@ -2,8 +2,9 @@ import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
 import fs from 'fs';
-import * as pdflib from 'pdf-lib';
-const { PDFDocument } = pdflib
+import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
+//import * as pdflib from 'pdf-lib';
+//const { PDFDocument } = pdflib
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -77,53 +78,83 @@ app.post('/preparar-firma', upload.single('documento'), async (req, res) => {
     try {
         const { docId } = req.body;
         const config = dbDocumentos.find(d => d.id === docId);
-        if (!config) return res.status(400).send('Tipo no encontrado');
+        
+        if (!config) return res.status(400).send('Tipo de documento no reconocido.');
 
+        // 1. Cargar el PDF
         const pdfDoc = await PDFDocument.load(req.file.buffer);
         
-        // --- TRUCO DE COMPATIBILIDAD ---
-        // Obtenemos el formulario y forzamos la inicialización de campos
-        const form = pdfDoc.getForm();
-        const pages = pdfDoc.getPages();
+        // --- AQUÍ ESTÁ LA LÍNEA QUE FALTABA ---
+        const pages = pdfDoc.getPages(); 
+        // -------------------------------------
 
         let finalX, finalY, targetPageIndex;
-        // ... (Tu lógica de coordenadas se mantiene igual) ...
+
+        // 2. Lógica de coordenadas (Etiqueta vs Fijas)
         if (config.tieneEtiqueta) {
             const coords = await getCoordsFromText(req.file.buffer, config.etiqueta);
-            if (!coords) return res.status(422).send('Etiqueta no encontrada');
-            finalX = coords.x; finalY = coords.y - 30; targetPageIndex = coords.pageIndex;
+            if (!coords) return res.status(422).send('Etiqueta no encontrada en el PDF.');
+            finalX = coords.x;
+            finalY = coords.y - 30; // Ajuste Y
+            targetPageIndex = coords.pageIndex;
         } else {
-            finalX = config.x; finalY = config.y; targetPageIndex = config.pagina || 0;
+            finalX = config.x;
+            finalY = config.y;
+            targetPageIndex = config.pagina || 0;
         }
 
-        // --- INYECCIÓN ROBUSTA ---
-        // Si form.createSignature no aparece, usamos el método 'getTextField' 
-        // como alternativa, ya que para muchas tabletas de firma, 
-        // un campo de texto con el nombre correcto funciona igual.
+        // 3. INYECCIÓN DE CAMPO DE FIRMA REAL (API DE BAJO NIVEL)
+        const page = pages[targetPageIndex];
         
-        try {
-            console.log("Intentando crear campo de firma...");
-            const signatureField = form.createSignature('SignatureField1');
-            signatureField.addToPage(pages[targetPageIndex], {
-                x: finalX, y: finalY, width: 200, height: 60,
+        // Creamos el diccionario del campo de firma (/FT /Sig)
+        const sigFieldDict = pdfDoc.context.obj({
+            Type: 'Annot',
+            Subtype: 'Widget',
+            FT: 'Sig', 
+            T: PDFString.of('SignatureField1'), 
+            F: 4, 
+            Rect: [finalX, finalY, finalX + 200, finalY + 60], 
+            P: page.ref,
+        });
+
+        const sigFieldRef = pdfDoc.context.register(sigFieldDict);
+
+        // Añadimos el Widget a las anotaciones de la página
+        let annots = page.node.Annots();
+        if (!annots) {
+            annots = pdfDoc.context.obj([]);
+            page.node.set(PDFName.of('Annots'), annots);
+        }
+        annots.push(sigFieldRef);
+
+        // Lo registramos en el catálogo global del formulario (AcroForm)
+        let acroForm = pdfDoc.catalog.get(PDFName.of('AcroForm'));
+        if (!acroForm) {
+            acroForm = pdfDoc.context.obj({
+                Fields: [],
+                SigFlags: 3, 
             });
-        } catch (e) {
-            console.warn("createSignature falló, usando fallback de campo de texto...");
-            // Si la firma falla, creamos un campo de texto. 
-            // Bank4Me suele mapear por nombre de campo ('SignatureField1')
-            const textField = form.createTextField('SignatureField1');
-            textField.addToPage(pages[targetPageIndex], {
-                x: finalX, y: finalY, width: 200, height: 60,
-            });
+            pdfDoc.catalog.set(PDFName.of('AcroForm'), acroForm);
         }
 
+        const fields = acroForm.get(PDFName.of('Fields'));
+        if (fields) {
+            fields.push(sigFieldRef);
+        } else {
+            acroForm.set(PDFName.of('Fields'), pdfDoc.context.obj([sigFieldRef]));
+        }
+
+        acroForm.set(PDFName.of('SigFlags'), pdfDoc.context.obj(3));
+
+        // 4. Guardar y enviar
         const pdfBytes = await pdfDoc.save();
 
         res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename=preparado_firma.pdf');
         res.send(Buffer.from(pdfBytes));
 
     } catch (error) {
-        console.error("ERROR:", error);
+        console.error("Error procesando el PDF:", error);
         res.status(500).send(error.message);
     }
 });
